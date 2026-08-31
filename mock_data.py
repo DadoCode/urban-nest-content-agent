@@ -10,7 +10,7 @@ BRAND = {
     "name": "Urban Nest Estates",
     "what_we_do": (
         "Urban Nest Estates manages professionally furnished short-let "
-        "apartments in London and Manchester, for both leisure travellers "
+        "apartments in London, for both leisure travellers "
         "and corporate/relocation guests."
     ),
     "tone_of_voice": (
@@ -23,9 +23,9 @@ BRAND = {
         "Corporate travellers and relocating professionals needing 1-6 month stays",
         "Landlords considering short-let management",
     ],
-    "cities": ["London", "Manchester"],
+    "cities": ["London"],
     "instagram_handle": "@urbannestestates",
-    "hashtags_core": ["#UrbanNestEstates", "#ShortLets", "#LondonApartments", "#ManchesterApartments"],
+    "hashtags_core": ["#UrbanNestEstates", "#ShortLets", "#LondonApartments"],
     "website": "urbannestestates.co.uk",
 }
 
@@ -62,36 +62,6 @@ PROPERTIES = [
         "ideal_for": ["corporate stays", "relocation", "business travellers"],
     },
     {
-        "id": "mcr-01",
-        "name": "Northern Quarter Studio",
-        "city": "Manchester",
-        "area": "Northern Quarter",
-        "bedrooms": 0,
-        "sleeps": 2,
-        "type": "studio apartment",
-        "standout_features": [
-            "walking distance to independent cafes and record shops",
-            "compact, self-catering kitchen",
-            "pet-friendly",
-        ],
-        "ideal_for": ["solo travellers", "weekend trips", "pet owners"],
-    },
-    {
-        "id": "mcr-02",
-        "name": "Deansgate Family Apartment",
-        "city": "Manchester",
-        "area": "Deansgate",
-        "bedrooms": 3,
-        "sleeps": 6,
-        "type": "apartment",
-        "standout_features": [
-            "washing machine and full kitchen",
-            "2-minute walk to tram stop",
-            "close to Manchester Central Library and museums",
-        ],
-        "ideal_for": ["families", "longer stays", "groups"],
-    },
-    {
         "id": "ldn-03",
         "name": "Kensington Garden Flat",
         "city": "London",
@@ -120,7 +90,7 @@ CONTENT_TYPES = [
     },
     {
         "key": "neighbourhood",
-        "label": "Neighbourhood / London / Manchester content",
+        "label": "Neighbourhood / London content",
         "requires_property": False,
         "typical_formats": ["Carousel", "Reel concept", "Story"],
     },

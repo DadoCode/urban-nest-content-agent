@@ -100,7 +100,7 @@ def _template_fallback(brand: dict, content_type: dict, property_record: dict | 
     templates = {
         "neighbourhood": {
             "objective": "Build local authority and inspire travel to our cities.",
-            "content_idea": "Guide-style highlight of a neighbourhood in London or Manchester.",
+            "content_idea": "Guide-style highlight of a neighbourhood in London.",
             "hook": "This is the area our guests keep asking to come back to.",
             "visual_needed": "Street-level photos/video of local cafes, shops, and transport links.",
             "caption": f"A local's guide to one of our favourite neighbourhoods. {hashtags}",
@@ -108,7 +108,7 @@ def _template_fallback(brand: dict, content_type: dict, property_record: dict | 
         },
         "travel_tips": {
             "objective": "Provide value to followers and position the brand as a travel expert.",
-            "content_idea": "Practical tips for staying in London or Manchester like a local.",
+            "content_idea": "Practical tips for staying in London like a local.",
             "hook": "3 things every visitor wishes they knew sooner.",
             "visual_needed": "Simple text-on-image carousel slides, no property footage needed.",
             "caption": f"A few tips to make your next trip smoother. {hashtags}",
@@ -148,7 +148,7 @@ def _template_fallback(brand: dict, content_type: dict, property_record: dict | 
         },
         "seasonal": {
             "objective": "Stay culturally relevant and timely with the season.",
-            "content_idea": "Tie current season/holidays to travel in London or Manchester.",
+            "content_idea": "Tie current season/holidays to travel in London.",
             "hook": "This is the best time of year to visit.",
             "visual_needed": "Seasonal imagery of the city (lights, weather, events) — no specific property required.",
             "caption": f"There's something special about this time of year in the city. {hashtags}",
