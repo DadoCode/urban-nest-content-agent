@@ -62,7 +62,25 @@ def print_plan(plan: dict) -> None:
         print(f"  CTA:            {post['cta']}")
         if post.get("_generation_warning"):
             print(f"  [warning] {post['_generation_warning']}")
+        if post.get("visual_assets"):
+            print_visual_assets(post["visual_assets"])
         print()
+
+
+def print_visual_assets(visual_assets: dict) -> None:
+    print("  Visual assets:")
+    if not visual_assets["assets_selected"]:
+        print(f"    (none available) {visual_assets['missing_visual_notes']}")
+        return
+    print(f"    Order:   {' -> '.join(visual_assets['assets_selected'])}")
+    print(f"    Cover:   {visual_assets['cover_asset']}")
+    for filename in visual_assets["assets_selected"]:
+        description = visual_assets["asset_descriptions"].get(filename, "")
+        reason = visual_assets["asset_reasons"].get(filename, "")
+        print(f"      - {filename}: {description}")
+        print(f"          why: {reason}")
+    print(f"    Overlay text: {visual_assets['overlay_text']}")
+    print(f"    Missing:      {visual_assets['missing_visual_notes']}")
 
 
 def save_plan(plan: dict) -> Path:

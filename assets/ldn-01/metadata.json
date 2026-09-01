@@ -1,0 +1,32 @@
+[
+  {
+    "filename": "living_room_01.jpg",
+    "shot_type": "living_room",
+    "quality": 5,
+    "description": "Bright living area with exposed brick wall and large windows."
+  },
+  {
+    "filename": "living_room_02.jpg",
+    "shot_type": "living_room",
+    "quality": 3,
+    "description": "Living area from a slightly different angle, largely overlaps with living_room_01."
+  },
+  {
+    "filename": "bedroom_01.jpg",
+    "shot_type": "bedroom",
+    "quality": 4,
+    "description": "Bedroom with a floor-to-ceiling window."
+  },
+  {
+    "filename": "kitchen_01.jpg",
+    "shot_type": "kitchen",
+    "quality": 2,
+    "description": "Dim, cluttered kitchen corner shot."
+  },
+  {
+    "filename": "exterior_01.jpg",
+    "shot_type": "exterior",
+    "quality": 4,
+    "description": "Building exterior on a Shoreditch street."
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "filename": "garden_01.jpg",
+    "shot_type": "garden",
+    "quality": 5,
+    "description": "Private courtyard garden with seating."
+  },
+  {
+    "filename": "living_room_01.jpg",
+    "shot_type": "living_room",
+    "quality": 4,
+    "description": "Bright living room."
+  },
+  {
+    "filename": "bedroom_01.jpg",
+    "shot_type": "bedroom",
+    "quality": 4,
+    "description": "Main bedroom."
+  },
+  {
+    "filename": "street_01.jpg",
+    "shot_type": "exterior",
+    "quality": 2,
+    "description": "Quiet residential street, slightly blurry shot."
+  }
+]

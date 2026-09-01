@@ -20,6 +20,7 @@ import json
 import os
 import random
 
+import assets
 from history import describe_for_prompt, freshness_weight, rank_by_freshness, weighted_sample_without_replacement
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
@@ -281,4 +282,10 @@ def generate_post(
         "reason": reason,
     }
     post.update(body)
+
+    post["visual_assets"] = (
+        assets.select_assets_for_post(brand, property_record, chosen_format, post["hook"], rng)
+        if property_record is not None
+        else None
+    )
     return post

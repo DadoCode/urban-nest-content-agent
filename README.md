@@ -1,9 +1,11 @@
-# Urban Nest Estates — Instagram Content Agent (V2, local prototype)
+# Urban Nest Estates — Instagram Content Agent (V3, local prototype)
 
 Generates a plan of 3 varied Instagram posts per week from local mock data,
-using local history so weeks don't repeat themselves. No external
+using local history so weeks don't repeat themselves, and selects visual
+assets for property posts from a local images folder. No external
 integrations (no Google Drive, Instagram API, n8n, GitHub Actions, scheduling,
-or auto-publishing).
+or auto-publishing). No images are generated — only selected from what's
+already on disk.
 
 ## Run it
 
@@ -39,10 +41,26 @@ python3 -m unittest discover -s tests -t .
   backfilled from the offline heuristic if invalid.
 - `generator.py` — turns a decided post into full copy: objective, content
   idea, hook, visual needed, caption, CTA, and a history-aware format choice.
+  For property posts, also calls `assets.py` to pick the visuals.
+- `assets.py` — selects, orders, and critiques images for property posts.
+  Reads `assets/<property_id>/` (real image files + a `metadata.json`
+  describing each one: shot type, a short description, and a 1-5 quality
+  score). Picks the strongest, most varied set, chooses a cover/hero image,
+  and only suggests overlay text when it would genuinely add something.
+  Uses Claude vision when `ANTHROPIC_API_KEY` is set; otherwise a
+  metadata-driven offline heuristic.
 - `main.py` — orchestrates the above, prints the plan (including each post's
-  `reason`), saves it as JSON to `output/weekly_plan_<date>.json`.
+  `reason` and, where relevant, its visual asset selection), saves it as
+  JSON to `output/weekly_plan_<date>.json`.
+- `assets/` — local image folders per property id (e.g. `assets/ldn-01/`),
+  each with a `metadata.json`. Drop your own images in and add matching
+  metadata entries to test with different photos.
+- `scripts/generate_sample_assets.py` — dev-only helper (needs Pillow) that
+  generated the placeholder sample images checked into `assets/`. Not needed
+  to run the agent.
 - `tests/` — unit tests for the history/freshness logic, the offline planner
-  fallback, and the generator, run with no API key required.
+  and asset-selection fallbacks, and the generator — all run with no API key
+  required.
 
 ## Key architectural decisions
 
@@ -74,3 +92,13 @@ python3 -m unittest discover -s tests -t .
 - **Mock data lives in plain Python, not JSON/a database.** For a handful of
   records, a Python file is the simplest thing that works and is trivial to
   edit by hand.
+- **Image metadata is mock data too, not real computer vision.** Offline,
+  `assets.py` only knows what `metadata.json` says about an image (shot
+  type, description, quality) — the same grounding rule as property facts:
+  it never invents what's in a photo it hasn't actually looked at. When
+  Claude vision is available, it looks at the real pixels and can override
+  the metadata hints; the metadata is only a fallback description used
+  offline and a hint the model can correct.
+- **Asset selection only applies to property-based posts.** Non-property
+  posts (travel tips, brand lifestyle, etc.) get `visual_assets: null` —
+  not every post needs property images, so nothing is forced.

@@ -1,0 +1,32 @@
+[
+  {
+    "filename": "living_room_01.jpg",
+    "shot_type": "living_room",
+    "quality": 4,
+    "description": "Living/work area with a dedicated desk setup."
+  },
+  {
+    "filename": "bedroom_01.jpg",
+    "shot_type": "bedroom",
+    "quality": 4,
+    "description": "Bedroom with a work desk."
+  },
+  {
+    "filename": "bedroom_02.jpg",
+    "shot_type": "bedroom",
+    "quality": 3,
+    "description": "Second bedroom, similar desk setup to bedroom_01."
+  },
+  {
+    "filename": "gym_01.jpg",
+    "shot_type": "gym",
+    "quality": 5,
+    "description": "On-site gym facilities."
+  },
+  {
+    "filename": "exterior_01.jpg",
+    "shot_type": "exterior",
+    "quality": 3,
+    "description": "High-rise exterior view."
+  }
+]
