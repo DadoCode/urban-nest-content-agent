@@ -1,42 +1,48 @@
 """
-Urban Nest Estates — Instagram Content Agent (V1, local prototype)
+Urban Nest Estates — Instagram Content Agent (V2, local prototype)
 
 Generates a plan of 3 varied Instagram posts for the week using local mock
-data only. No external integrations (no Google Drive, Instagram API, n8n,
-or GitHub Actions). Optionally uses the Anthropic API for copywriting if
-ANTHROPIC_API_KEY is set in the environment; otherwise runs fully offline
-with template-based content.
+data and local history only. No external integrations (no Google Drive,
+Instagram API, n8n, or GitHub Actions). Optionally uses the Anthropic API for
+planning + copywriting if ANTHROPIC_API_KEY is set in the environment;
+otherwise runs fully offline with history-aware, freshness-weighted rules.
 
 Usage:
     python main.py
+    python main.py --week-of 2026-09-08   # override the week label (for demos/tests)
 """
 
+import argparse
 import json
 import random
 from datetime import date
 from pathlib import Path
 
+import history
 from generator import generate_post
 from mock_data import BRAND
-from planner import pick_property_for_showcase, pick_weekly_content_types
+from planner import build_weekly_decisions
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 
-def build_weekly_plan(rng: random.Random | None = None) -> dict:
+def build_weekly_plan(week_of: str | None = None, rng: random.Random | None = None) -> dict:
     rng = rng or random.Random()
-    content_types = pick_weekly_content_types(rng)
+    week_of = week_of or date.today().isoformat()
 
-    posts = []
-    for content_type in content_types:
-        property_record = (
-            pick_property_for_showcase(rng) if content_type["requires_property"] else None
-        )
-        posts.append(generate_post(BRAND, content_type, property_record, rng))
+    recent_plans = history.load_recent_plans(before=week_of)
+    history_summary = history.summarize(recent_plans)
+
+    decisions = build_weekly_decisions(BRAND, history_summary, rng)
+
+    posts = [
+        generate_post(BRAND, d["content_type"], d["property"], history_summary, d["reason"], rng)
+        for d in decisions
+    ]
 
     return {
         "brand": BRAND["name"],
-        "week_of": date.today().isoformat(),
+        "week_of": week_of,
         "posts": posts,
     }
 
@@ -47,6 +53,7 @@ def print_plan(plan: dict) -> None:
         print(f"POST {i}: {post['content_type']}  [{post['format']}]")
         if post["property"]:
             print(f"  Property: {post['property']}")
+        print(f"  Reason:         {post['reason']}")
         print(f"  Objective:      {post['objective']}")
         print(f"  Content idea:   {post['content_idea']}")
         print(f"  Hook:           {post['hook']}")
@@ -66,7 +73,15 @@ def save_plan(plan: dict) -> Path:
 
 
 def main():
-    plan = build_weekly_plan()
+    parser = argparse.ArgumentParser(description="Generate this week's Instagram content plan.")
+    parser.add_argument(
+        "--week-of",
+        default=None,
+        help="ISO date label for this week's plan (defaults to today). Useful for demos/tests.",
+    )
+    args = parser.parse_args()
+
+    plan = build_weekly_plan(week_of=args.week_of)
     print_plan(plan)
     out_path = save_plan(plan)
     print(f"Saved plan to {out_path}")
