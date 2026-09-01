@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import generator
-from mock_data import CONTENT_TYPES, PROPERTIES
+from mock_data import CONTENT_TYPES, MOCK_PROPERTIES as PROPERTIES
 
 REQUIRED_KEYS = {"objective", "content_idea", "hook", "visual_needed", "caption", "cta", "reason", "format"}
 

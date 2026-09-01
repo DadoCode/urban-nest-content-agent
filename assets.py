@@ -21,6 +21,7 @@ import random
 from pathlib import Path
 
 ASSETS_DIR = Path(__file__).parent / "assets"
+PRIVATE_ASSETS_DIR = ASSETS_DIR / "private"
 ANTHROPIC_MODEL = "claude-sonnet-5"
 
 QUALITY_THRESHOLD = 3
@@ -35,8 +36,13 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 def load_asset_records(property_id: str) -> list[dict]:
     """Load image records for a property: metadata entries whose file
     actually exists on disk, plus any image file present but not described
-    in metadata.json (kept, but flagged as undescribed)."""
-    property_dir = ASSETS_DIR / property_id
+    in metadata.json (kept, but flagged as undescribed).
+
+    Checks assets/private/<property_id>/ first (real, gitignored photos),
+    then falls back to assets/<property_id>/ (committed test/demo photos)."""
+    property_dir = PRIVATE_ASSETS_DIR / property_id
+    if not property_dir.exists():
+        property_dir = ASSETS_DIR / property_id
     if not property_dir.exists():
         return []
 
@@ -146,13 +152,16 @@ def _offline_select(
                 continue
             selected.append(asset)
 
-    cover = max(selected, key=lambda a: a["quality"])
-
     def order_key(asset):
         try:
             return PREFERRED_SHOT_ORDER.index(asset["shot_type"])
         except ValueError:
             return len(PREFERRED_SHOT_ORDER)
+
+    # Highest quality wins; a tie breaks toward the room type Instagram
+    # carousels conventionally lead with (exterior/living room over e.g.
+    # a bathroom), instead of whichever happened to sort first.
+    cover = min(selected, key=lambda a: (-a["quality"], order_key(a)))
 
     remaining = sorted((a for a in selected if a is not cover), key=order_key)
     ordered = [cover] + remaining

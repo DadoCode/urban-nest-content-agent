@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import assets
-from mock_data import PROPERTIES
+from mock_data import MOCK_PROPERTIES as PROPERTIES
 
 RIVERSIDE_LOFT = next(p for p in PROPERTIES if p["id"] == "ldn-01")
 

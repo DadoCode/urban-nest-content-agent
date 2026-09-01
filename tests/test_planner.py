@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import planner
-from mock_data import PROPERTIES
+from real_properties import PROPERTIES
 
 
 def _empty_history():
@@ -64,9 +64,9 @@ class TestFallbackDecide(unittest.TestCase):
 
     def test_recently_used_property_is_favored_less(self):
         history_summary = _empty_history()
-        history_summary["property_recency"] = {"Riverside Loft": 0}  # used last week
+        history_summary["property_recency"] = {"Draycott Avenue": 0}  # used last week
 
-        counts = {"Riverside Loft": 0}
+        counts = {"Draycott Avenue": 0}
         trials = 100
         for seed in range(trials):
             decisions = planner._fallback_decide(history_summary, random.Random(seed))
@@ -76,7 +76,7 @@ class TestFallbackDecide(unittest.TestCase):
 
         showcased_total = sum(counts.values())
         if showcased_total:  # only meaningful if showcase was picked at least once
-            self.assertLess(counts.get("Riverside Loft", 0), showcased_total)
+            self.assertLess(counts.get("Draycott Avenue", 0), showcased_total)
 
 
 if __name__ == "__main__":

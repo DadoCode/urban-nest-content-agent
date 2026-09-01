@@ -1,27 +1,32 @@
 """
-Local mock data for the Urban Nest Estates content agent (V1 prototype).
+Brand context and mock/test data for the Urban Nest Estates content agent.
 
-This is FAKE data for testing only. No real property or guest information
-is stored here. When the agent generates content about a specific property,
-it must only use the facts present in that property's record below.
+BRAND reflects the real company (sourced from urbannestestates.co.uk).
+MOCK_PROPERTIES below is FAKE data used only for tests and offline demos —
+the actual weekly plan uses REAL_PROPERTIES from real_properties.py instead.
+When the agent generates content about a specific property, it must only use
+the facts present in that property's record — never invent details beyond it.
 """
 
 BRAND = {
     "name": "Urban Nest Estates",
     "what_we_do": (
-        "Urban Nest Estates manages professionally furnished short-let "
-        "apartments in London, for both leisure travellers "
-        "and corporate/relocation guests."
+        "Urban Nest Estates is a curated London rental management company "
+        "offering professionally furnished short and medium-term apartments. "
+        "Tagline: 'Refined London living, made effortless.' The brand "
+        "prioritizes quality over scale ('care before scale') and manages a "
+        "considered collection rather than pursuing unlimited growth."
     ),
     "tone_of_voice": (
-        "Warm, professional, and confident — like a knowledgeable local "
-        "friend, not a corporate hotel chain. Avoid hype and excessive "
-        "exclamation marks."
+        "Sophisticated and reassuring, precise but warm — 'personal care, "
+        "without compromise.' Confident like a knowledgeable local host, "
+        "not a corporate hotel chain. Avoid hype and excessive exclamation "
+        "marks."
     ),
     "target_audiences": [
-        "Leisure travellers wanting a 'home away from home'",
-        "Corporate travellers and relocating professionals needing 1-6 month stays",
-        "Landlords considering short-let management",
+        "Guests seeking premium short/medium-term London accommodations with a seamless, attentive experience",
+        "Corporate travellers and relocating professionals needing longer stays",
+        "Landlords/property owners seeking professional management that preserves property value at the highest standard",
     ],
     "cities": ["London"],
     "instagram_handle": "@urbannestestates",
@@ -29,8 +34,10 @@ BRAND = {
     "website": "urbannestestates.co.uk",
 }
 
-# Fictional mock properties — placeholder data for prototype testing only.
-PROPERTIES = [
+# Fictional mock properties — placeholder data for tests/offline demos only.
+# NOT used for real weekly plans; see real_properties.py for the actual
+# properties the agent posts about.
+MOCK_PROPERTIES = [
     {
         "id": "ldn-01",
         "name": "Riverside Loft",

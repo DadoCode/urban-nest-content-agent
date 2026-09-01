@@ -21,7 +21,8 @@ import os
 import random
 
 from history import describe_for_prompt, freshness_weight, rank_by_freshness, weighted_sample_without_replacement
-from mock_data import CONTENT_MIX_GUIDANCE, CONTENT_TYPES, PROPERTIES
+from mock_data import CONTENT_MIX_GUIDANCE, CONTENT_TYPES
+from real_properties import PROPERTIES
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
 
