@@ -401,8 +401,25 @@ def _folder_name(index: int, post: dict) -> str:
 def render_post(post: dict, folder: Path) -> None:
     """Renders the post's files to disk. Also attaches post['_render_warnings']
     (mutating the dict in place) so publishability.check_post can report on
-    any text that needed shrinking/truncating or an overlay that got skipped."""
+    any text that needed shrinking/truncating or an overlay that got skipped.
+
+    A post already carrying a "cannot_produce" verdict (set before rendering,
+    from publishability.check_post on the generated copy) is never rendered
+    as a finished, ready-looking asset — a BLOCKED.txt explaining why is
+    written instead, so nothing that failed grounding could be mistaken for
+    something ready to publish."""
     folder.mkdir(parents=True, exist_ok=True)
+
+    prior_check = post.get("_publishability")
+    if prior_check and prior_check["status"] == "cannot_produce":
+        reasons = "\n".join(f"- [{i['severity']}] {i['code']}: {i['message']}" for i in prior_check["issues"])
+        (folder / "BLOCKED.txt").write_text(
+            "This post was NOT rendered because it failed a publishability check:\n\n"
+            f"{reasons}\n\nChoose a different content idea, or fix the source data, and regenerate."
+        )
+        (folder / "caption.txt").write_text(post["caption"])
+        return
+
     warnings: list[str] = []
 
     if post["format"] == "Reel concept":

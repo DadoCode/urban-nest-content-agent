@@ -22,6 +22,14 @@ check_post() returns one of three statuses:
   "needs_revision"  — minor/advisory issues; still usable as-is.
   "cannot_produce"  — a blocking issue; the caller should pick a different
                        idea rather than ship this one.
+
+Property-fact grounding (see _check_property_facts) is deliberately simple:
+no NLP, just structured lookups against the property catalogue we already
+have — exact/substring matches for names, areas, types, and standout
+features, plus small fixed keyword lists for a few claim categories
+(balcony/outdoor space, gym, transport). The rule is: any specific,
+checkable claim about a property must trace back to that property's own
+record, or it's blocking.
 """
 
 import re
@@ -37,6 +45,18 @@ GENERIC_CTAS = {"click here", "learn more", "swipe up", "check it out", "find ou
 # are exempt from the "unsupported claim" scan, since for them it's the point.
 OFFER_BACKED_LABELS = {"Offers"}
 REVIEW_BACKED_LABELS = {"Reviews"}
+
+# Claim category -> keywords. If the copy uses any keyword from a category,
+# the property's OWN standout_features must contain a keyword from that same
+# category, or the claim isn't backed by anything in the source record.
+AMENITY_CATEGORIES = {
+    "balcony/outdoor space": ["balcony", "terrace", "courtyard", "garden", "outdoor space"],
+    "gym/access": ["gym", "fitness suite", "fitness room"],
+    "transport/walking time": ["walk to", "minute walk", "-minute walk", "station", " dlr", "tube", "underground"],
+}
+
+BEDROOM_PATTERN = re.compile(r"(\d+)[\s-]*bed(?:room)?s?\b")
+SLEEPS_PATTERN = re.compile(r"sleep(?:s|ing)?\s+(\d+)")
 
 
 def feasible_content_types(content_types: list[dict], brand: dict) -> list[dict]:
@@ -54,16 +74,99 @@ def feasible_content_types(content_types: list[dict], brand: dict) -> list[dict]
     return feasible
 
 
-def _find_property_record(property_id: str | None) -> dict | None:
-    if not property_id:
-        return None
+def _all_property_records() -> list[dict]:
     from mock_data import MOCK_PROPERTIES
     from real_properties import PROPERTIES as REAL_PROPERTIES
 
-    for record in REAL_PROPERTIES + MOCK_PROPERTIES:
+    return REAL_PROPERTIES + MOCK_PROPERTIES
+
+
+def _find_property_record(property_id: str | None) -> dict | None:
+    if not property_id:
+        return None
+    for record in _all_property_records():
         if record["id"] == property_id:
             return record
     return None
+
+
+def _check_property_facts(all_text_lower: str, record: dict, flag) -> None:
+    """Cross-checks every specific, checkable claim in all_text_lower
+    against `record` (this post's own property) and the wider property
+    catalogue — never against free-form understanding of the sentence."""
+    other_records = [r for r in _all_property_records() if r["id"] != record["id"]]
+    own_features_text = " ".join(record["standout_features"]).lower()
+
+    # Wrong property entirely.
+    for other in other_records:
+        if other["name"].lower() in all_text_lower:
+            flag("blocking", "unsupported_property_fact", f"Mentions '{other['name']}', a different property.")
+
+    # Area/location claimed that belongs to a different known property.
+    known_areas = {r["area"] for r in _all_property_records()}
+    for area in known_areas:
+        if area == record["area"]:
+            continue
+        if area.lower() in all_text_lower:
+            flag(
+                "blocking", "unsupported_property_fact",
+                f"Mentions '{area}', which is not this property's area ({record['area']}).",
+            )
+
+    # Property type claimed that belongs to a different known property.
+    known_types = {r["type"] for r in _all_property_records()}
+    for type_name in known_types:
+        if type_name == record["type"]:
+            continue
+        if type_name.lower() in all_text_lower:
+            flag(
+                "blocking", "unsupported_property_fact",
+                f"Describes it as '{type_name}', but the record says {record['type']}.",
+            )
+
+    # Bedrooms / sleeps counts.
+    m = BEDROOM_PATTERN.search(all_text_lower)
+    if m and int(m.group(1)) != record["bedrooms"]:
+        flag(
+            "blocking", "unsupported_property_fact",
+            f"Claims {m.group(1)} bedroom(s), but the record says {record['bedrooms']}.",
+        )
+    m = SLEEPS_PATTERN.search(all_text_lower)
+    if m and int(m.group(1)) != record["sleeps"]:
+        flag(
+            "blocking", "unsupported_property_fact",
+            f"Claims sleeping {m.group(1)}, but the record says {record['sleeps']}.",
+        )
+
+    # A standout feature that belongs to a different property.
+    for other in other_records:
+        for feature in other["standout_features"]:
+            if feature.lower() in all_text_lower and feature.lower() not in own_features_text:
+                flag(
+                    "blocking", "unsupported_property_fact",
+                    f"Mentions '{feature}', a feature of {other['name']}, not this property.",
+                )
+
+    # Amenity-category claims (balcony/outdoor, gym, transport) not backed
+    # by anything in this property's own standout_features.
+    for category, keywords in AMENITY_CATEGORIES.items():
+        claimed = any(kw in all_text_lower for kw in keywords)
+        supported = any(kw in own_features_text for kw in keywords)
+        if claimed and not supported:
+            flag(
+                "blocking", "unsupported_property_fact",
+                f"Claims a {category} feature that isn't listed for this property.",
+            )
+
+    # Target/ideal guest type — softer field, so advisory rather than blocking.
+    own_ideal = {p.lower() for p in record["ideal_for"]}
+    other_ideal_phrases = {p for r in other_records for p in r["ideal_for"] if p.lower() not in own_ideal}
+    for phrase in other_ideal_phrases:
+        if phrase.lower() in all_text_lower:
+            flag(
+                "advisory", "unsupported_property_fact",
+                f"Mentions '{phrase}' as an ideal guest type, which isn't listed for this property.",
+            )
 
 
 def check_post(post: dict) -> dict:
@@ -112,13 +215,11 @@ def check_post(post: dict) -> dict:
     if post.get("property_id"):
         record = _find_property_record(post["property_id"])
         if record:
-            m = re.search(r"sleeping (\d+)", text_fields["caption"].lower())
-            if m and int(m.group(1)) != record["sleeps"]:
-                flag(
-                    "blocking",
-                    "unsupported_property_fact",
-                    f"Caption says 'sleeping {m.group(1)}' but the property record says {record['sleeps']}.",
-                )
+            # Overlay text gets rendered onto the actual photo, so it's a
+            # real factual claim too — include it alongside the copy fields.
+            va = post.get("visual_assets") or {}
+            property_text_lower = all_text + " " + (va.get("overlay_text") or "").lower()
+            _check_property_facts(property_text_lower, record, flag)
         if post.get("format") == "Carousel":
             va = post.get("visual_assets") or {}
             if not va.get("assets_selected"):

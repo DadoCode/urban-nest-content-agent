@@ -30,6 +30,30 @@ def _base_post(**overrides):
     return post
 
 
+def _property_post(property_id="draycott", **overrides):
+    """A Property Showcase post about a real property (Draycott Avenue by
+    default: Chelsea, 1 bed, sleeps 4, split-level maisonette; features are
+    a mantelpiece living area, a bedroom, and a walk to Sloane Square — no
+    gym, balcony, or transport-DLR feature)."""
+    post = {
+        "content_type": "Property Showcase",
+        "format": "Carousel",
+        "property": "Draycott Avenue",
+        "property_id": property_id,
+        "hook": "Your next stay in Chelsea could look like this.",
+        "content_idea": "Walkthrough-style tour of the split-level maisonette in Chelsea, London.",
+        "caption": (
+            "Say hello to Draycott Avenue — a split-level maisonette in Chelsea, London, "
+            "sleeping 4. Perfect for couples, families, professionals, guests travelling with pets."
+        ),
+        "cta": "Tap the link in bio to check availability.",
+        "objective": "Showcase Draycott Avenue to attract direct bookings.",
+        "visual_assets": {"assets_selected": ["living_room_wide.jpg"], "overlay_text": None},
+    }
+    post.update(overrides)
+    return post
+
+
 class TestFeasibleContentTypes(unittest.TestCase):
     def test_offers_and_reviews_excluded_when_no_real_data(self):
         feasible = publishability.feasible_content_types(CONTENT_TYPES, _brand())
@@ -120,6 +144,90 @@ class TestCheckPost(unittest.TestCase):
         result = publishability.check_post(post)
         self.assertEqual(result["status"], "needs_revision")
         self.assertTrue(any(i["code"] == "text_overflow_shrunk" for i in result["issues"]))
+
+
+class TestPropertyFactGrounding(unittest.TestCase):
+    """Deliberately incorrect claims about a real property (Draycott Avenue),
+    one per fact category the agent might get wrong."""
+
+    def test_accurate_property_post_is_ready(self):
+        result = publishability.check_post(_property_post())
+        self.assertEqual(result["status"], "ready", result["issues"])
+
+    def test_wrong_property_name_is_blocking(self):
+        post = _property_post(caption="Say hello to Eider Apartments, a lovely stay in Chelsea, sleeping 4.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_wrong_area_is_blocking(self):
+        post = _property_post(hook="Your next stay in Limehouse could look like this.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_wrong_bedroom_count_is_blocking(self):
+        post = _property_post(caption="A bright 2-bedroom maisonette in Chelsea, sleeping 4.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_wrong_sleeps_count_is_blocking(self):
+        post = _property_post(caption="Say hello to Draycott Avenue, sleeping 8.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_wrong_property_type_is_blocking(self):
+        post = _property_post(content_idea="A tour of this modern apartment in Chelsea.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_feature_borrowed_from_another_property_is_blocking(self):
+        post = _property_post(
+            content_idea="Enjoy the private wraparound balcony with views toward Canary Wharf and the docklands."
+        )
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_unsupported_gym_claim_is_blocking(self):
+        post = _property_post(hook="Start the day with on-site gym access before exploring Chelsea.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_unsupported_balcony_claim_is_blocking(self):
+        post = _property_post(hook="Morning coffee on your own private balcony in Chelsea.")
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_unsupported_transport_claim_is_blocking_for_property_without_one(self):
+        # Eider Apartments' own record has no walk/station/DLR feature at all.
+        post = _property_post(
+            property_id="pw", property="Eider Apartments",
+            caption="Eider Apartments is a 5-minute walk to the nearest station.",
+        )
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "cannot_produce")
+        self.assertTrue(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
+
+    def test_unsupported_ideal_guest_type_is_advisory_not_blocking(self):
+        # "guests wanting a peaceful lakeside stay" is Eider Apartments' ideal_for
+        # phrase, not Draycott's — and doesn't collide with any area/feature text.
+        post = _property_post(content_idea="A great pick for guests wanting a peaceful lakeside stay.")
+        result = publishability.check_post(post)
+        issue = next(i for i in result["issues"] if i["code"] == "unsupported_property_fact")
+        self.assertEqual(issue["severity"], "advisory")
+        self.assertEqual(result["status"], "needs_revision")
+
+    def test_correct_transport_claim_is_not_flagged(self):
+        # Draycott Avenue's own record does have this exact feature.
+        post = _property_post(content_idea="Just a 5-minute walk to Sloane Square station.")
+        result = publishability.check_post(post)
+        self.assertFalse(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
 
 
 if __name__ == "__main__":
