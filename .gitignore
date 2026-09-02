@@ -4,5 +4,6 @@ __pycache__/
 .venv/
 venv/
 output/*.json
+output/posts/
 .DS_Store
 assets/private/

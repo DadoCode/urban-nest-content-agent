@@ -283,6 +283,7 @@ def generate_post(
         "content_type": content_type["label"],
         "format": chosen_format,
         "property": property_record["name"] if property_record else None,
+        "property_id": property_record["id"] if property_record else None,
         "reason": reason,
     }
     post.update(body)

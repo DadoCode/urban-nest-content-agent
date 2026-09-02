@@ -1,15 +1,18 @@
 """
-Urban Nest Estates — Instagram Content Agent (V2, local prototype)
+Urban Nest Estates — Instagram Content Agent (V4, local prototype)
 
 Generates a plan of 3 varied Instagram posts for the week using local mock
-data and local history only. No external integrations (no Google Drive,
-Instagram API, n8n, or GitHub Actions). Optionally uses the Anthropic API for
-planning + copywriting if ANTHROPIC_API_KEY is set in the environment;
-otherwise runs fully offline with history-aware, freshness-weighted rules.
+data and local history only, then renders the actual post assets (carousel
+slides, Story/graphic images, or a Reel storyboard) to output/posts/. No
+external integrations (no Google Drive, Instagram API, n8n, or GitHub
+Actions, no publishing). Optionally uses the Anthropic API for planning +
+copywriting if ANTHROPIC_API_KEY is set in the environment; otherwise runs
+fully offline with history-aware, freshness-weighted rules.
 
 Usage:
     python main.py
     python main.py --week-of 2026-09-08   # override the week label (for demos/tests)
+    python main.py --no-render            # only produce the text plan, skip image rendering
 """
 
 import argparse
@@ -19,6 +22,7 @@ from datetime import date
 from pathlib import Path
 
 import history
+import render
 from generator import generate_post
 from mock_data import BRAND
 from planner import build_weekly_decisions
@@ -97,12 +101,21 @@ def main():
         default=None,
         help="ISO date label for this week's plan (defaults to today). Useful for demos/tests.",
     )
+    parser.add_argument(
+        "--no-render",
+        action="store_true",
+        help="Only produce the text plan; skip rendering carousel/story/graphic/storyboard assets.",
+    )
     args = parser.parse_args()
 
     plan = build_weekly_plan(week_of=args.week_of)
     print_plan(plan)
     out_path = save_plan(plan)
     print(f"Saved plan to {out_path}")
+
+    if not args.no_render:
+        rendered_dir = render.render_plan(plan)
+        print(f"Rendered post assets to {rendered_dir}")
 
 
 if __name__ == "__main__":
