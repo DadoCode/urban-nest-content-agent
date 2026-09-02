@@ -40,6 +40,10 @@ def _format_property_facts(property_record: dict) -> str:
     )
 
 
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
 def _pick_format(content_type: dict, history_summary: dict, rng: random.Random) -> str:
     formats = content_type["typical_formats"]
     weights = [freshness_weight(f, history_summary["format_recency"]) for f in formats]
@@ -141,7 +145,7 @@ def _template_fallback(
                 f"Photos/video of: {', '.join(p['standout_features'])}."
             ),
             "caption": (
-                f"Say hello to {p['name']} — a {p['type']} in {p['area']}, {p['city']}, "
+                f"Say hello to {p['name']} — {_article(p['type'])} {p['type']} in {p['area']}, {p['city']}, "
                 f"sleeping {p['sleeps']}. Perfect for {', '.join(p['ideal_for'])}. "
                 f"{hashtags}"
             ),
