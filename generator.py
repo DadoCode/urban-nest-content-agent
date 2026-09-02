@@ -19,9 +19,13 @@ don't read identically even without the Claude path.
 import json
 import os
 import random
+from datetime import date
 
 import assets
 from history import describe_for_prompt, freshness_weight, rank_by_freshness, weighted_sample_without_replacement
+from real_properties import PROPERTIES as REAL_PROPERTIES
+
+REAL_AREAS = sorted({p["area"] for p in REAL_PROPERTIES})
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
 
@@ -85,10 +89,19 @@ def _build_prompt(
     )
 
     lines.append(
+        "Copy quality bar: avoid generic AI-sounding filler — be specific and concrete, not vague. "
+        "The hook, caption, and CTA must each say something different; do not restate the hook inside "
+        "the caption, and do not make the CTA just repeat the hook. Never state or imply a discount, "
+        "promotion, or limited-time offer unless one is explicitly given to you above as a confirmed "
+        "fact — if none is given, don't invent one."
+    )
+
+    lines.append(
         "Return ONLY valid JSON (no markdown fences) with exactly these string keys: "
         '"objective", "content_idea", "hook", "visual_needed", "caption", "cta". '
-        "The caption should be 2-4 short sentences plus 3-5 relevant hashtags "
-        f"including {' '.join(brand['hashtags_core'])}."
+        "The caption should be 2-4 short sentences plus 3-5 relevant, specific hashtags "
+        f"(always include {' '.join(brand['hashtags_core'])}, and add a location/topic hashtag only "
+        "when it's genuinely relevant — don't pad with generic tags)."
     )
     return "\n\n".join(lines)
 
@@ -123,8 +136,17 @@ def _template_fallback(
     property_record: dict | None,
     history_summary: dict,
     rng: random.Random,
+    week_of: str | None = None,
 ) -> dict:
-    """Deterministic-ish, offline stand-in used when no ANTHROPIC_API_KEY is set."""
+    """Deterministic-ish, offline stand-in used when no ANTHROPIC_API_KEY is set.
+
+    Note: "Offers" and "Reviews" have no template here on purpose — they're
+    gated out by publishability.feasible_content_types() before generation
+    is ever reached, since we have no confirmed real offer/review to talk
+    about. If this function is ever called with one of those keys, that's a
+    bug in the gate, and a loud KeyError is safer than silently producing
+    placeholder copy.
+    """
     hashtags = " ".join(brand["hashtags_core"])
 
     if property_record is not None:
@@ -137,6 +159,7 @@ def _template_fallback(
             history_summary,
             rng,
         )
+        area_tag = "#" + p["area"].replace(" ", "").replace("-", "")
         return {
             "objective": f"Showcase {p['name']} to attract direct bookings.",
             "content_idea": f"Walkthrough-style tour of the {p['type']} in {p['area']}, {p['city']}.",
@@ -147,114 +170,96 @@ def _template_fallback(
             "caption": (
                 f"Say hello to {p['name']} — {_article(p['type'])} {p['type']} in {p['area']}, {p['city']}, "
                 f"sleeping {p['sleeps']}. Perfect for {', '.join(p['ideal_for'])}. "
-                f"{hashtags}"
+                f"{hashtags} {area_tag}"
             ),
             "cta": "Tap the link in bio to check availability.",
         }
 
+    area = rng.choice(REAL_AREAS)
+    month = date.fromisoformat(week_of).strftime("%B") if week_of else date.today().strftime("%B")
+
     templates = {
         "neighbourhood": {
-            "objective": "Build local authority and inspire travel to our cities.",
-            "content_idea": "Guide-style highlight of a neighbourhood in London.",
+            "objective": f"Build local authority around {area}, one of the areas we operate in.",
+            "content_idea": f"Guide-style highlight of {area}: what's actually worth a visitor's time.",
             "hooks": [
-                "This is the area our guests keep asking to come back to.",
-                "The neighbourhood everyone overlooks — and shouldn't.",
+                f"What a weekend in {area} actually looks like.",
+                f"{area}, the way someone who lives there would show you.",
             ],
-            "visual_needed": "Street-level photos/video of local cafes, shops, and transport links.",
-            "caption": f"A local's guide to one of our favourite neighbourhoods. {hashtags}",
-            "cta": "Save this post for your next trip.",
+            "visual_needed": f"Street-level photos/video of {area} — cafes, shopfronts, transport links.",
+            "caption": f"A local's take on {area}: where to eat, walk, and catch the train.",
+            "cta": "Save this for your next trip.",
         },
         "travel_tips": {
-            "objective": "Provide value to followers and position the brand as a travel expert.",
-            "content_idea": "Practical tips for staying in London like a local.",
+            "objective": "Give followers something genuinely useful, not just a booking pitch.",
+            "content_idea": "Three practical tips for getting around London without wasting a day of the trip.",
             "hooks": [
-                "3 things every visitor wishes they knew sooner.",
-                "The mistake most first-time visitors make.",
+                "The one thing every first-time visitor gets wrong about the Tube.",
+                "Three things that make a London trip run smoother.",
             ],
-            "visual_needed": "Simple text-on-image carousel slides, no property footage needed.",
-            "caption": f"A few tips to make your next trip smoother. {hashtags}",
-            "cta": "Which tip is most useful? Let us know in the comments.",
+            "visual_needed": "Simple, uncluttered text-on-image slides — no property footage needed.",
+            "caption": "A few things that make getting around town easier — worth saving before you land.",
+            "cta": "Which tip would help you most? Tell us below.",
         },
         "shortlet_vs_hotel": {
-            "objective": "Educate the audience on the benefits of short-lets over hotels.",
-            "content_idea": "Side-by-side comparison of short-let vs hotel stays.",
+            "objective": "Make the concrete case for a short-let over a hotel room, without overselling.",
+            "content_idea": "A side-by-side look at what you get with a short-let that a hotel room can't offer.",
             "hooks": [
-                "Same trip, more space, better value.",
-                "Why more travellers are skipping hotels altogether.",
+                "A hotel room can't do this.",
+                "Here's what you give up when you book a hotel instead.",
             ],
-            "visual_needed": "Split-screen graphic or carousel comparing space/kitchen/cost.",
-            "caption": f"Wondering whether to book a hotel or a short-let? Here's the difference. {hashtags}",
-            "cta": "DM us to find the right stay for your trip.",
+            "visual_needed": "Split-screen or side-by-side graphic comparing kitchen, space, and layout.",
+            "caption": "A full kitchen, a proper living room, and room to actually unpack — a hotel room can't match that.",
+            "cta": "DM us if you're deciding between the two.",
         },
         "corporate_longstay": {
-            "objective": "Attract corporate and relocation bookings for longer stays.",
-            "content_idea": "Highlight the ease of a 1-6 month corporate stay with us.",
+            "objective": "Speak directly to a corporate/relocating guest weighing a longer stay.",
+            "content_idea": "What a 1-6 month corporate stay with us actually includes, day to day.",
             "hooks": [
-                "Relocating for work shouldn't mean living out of a suitcase.",
-                "A better way to do a work trip that lasts months, not nights.",
+                "Relocating for work doesn't have to mean living out of a suitcase.",
+                "A month-long stay that still feels like your own place.",
             ],
-            "visual_needed": "Photos of a work-friendly setup (desk, fast wifi signage, quiet space).",
-            "caption": f"Moving for work? We make longer stays feel like home. {hashtags}",
+            "visual_needed": "Photos of a genuinely work-friendly setup: desk, storage, a quiet corner.",
+            "caption": "A dedicated workspace, proper storage, and a lease that flexes with the assignment.",
             "cta": "Message us about corporate rates.",
         },
         "landlord_facing": {
-            "objective": "Attract landlords interested in short-let property management.",
-            "content_idea": "Explain the benefits of letting your property with Urban Nest Estates.",
+            "objective": "Speak to a property owner evaluating short-let management, not a guest.",
+            "content_idea": "What a property owner actually gets when they let with Urban Nest Estates.",
             "hooks": [
-                "Your property, fully managed, zero hassle.",
-                "What your property could be earning with the right management.",
+                "Your property, managed the way you'd manage it yourself.",
+                "What good short-let management actually looks like day to day.",
             ],
-            "visual_needed": "Clean graphic listing management benefits, no guest-facing photos.",
-            "caption": f"Thinking about short-let management for your property? Let's talk. {hashtags}",
+            "visual_needed": "A clean, text-led graphic — no guest-facing photos needed here.",
+            "caption": "Professional cleaning, guest vetting, and upkeep — handled, so you don't have to think about it.",
             "cta": "Send us a message to find out how it works.",
         },
-        "reviews": {
-            "objective": "Build trust and social proof.",
-            "content_idea": "Feature a (placeholder) guest review as a quote graphic.",
-            "hooks": [
-                "Don't just take our word for it.",
-                "This is what guests actually say after staying with us.",
-            ],
-            "visual_needed": "Simple quote-card graphic on brand background — no fabricated review text yet.",
-            "caption": f"Guest experiences like this are why we do what we do. {hashtags}",
-            "cta": "Book your stay and tell us about it.",
-        },
         "seasonal": {
-            "objective": "Stay culturally relevant and timely with the season.",
-            "content_idea": "Tie current season/holidays to travel in London.",
+            "objective": f"Stay timely by tying content to {month} specifically, not a vague 'this time of year.'",
+            "content_idea": f"What {month} actually feels like in London, for anyone planning a visit.",
             "hooks": [
-                "This is the best time of year to visit.",
-                "Here's what the city looks like right now.",
+                f"What {month} in London actually feels like.",
+                f"Why {month} is one of the better times to visit.",
             ],
-            "visual_needed": "Seasonal imagery of the city (lights, weather, events) — no specific property required.",
-            "caption": f"There's something special about this time of year in the city. {hashtags}",
-            "cta": "Plan your seasonal getaway — link in bio.",
-        },
-        "offers": {
-            "objective": "Drive direct bookings through a promotional push.",
-            "content_idea": "Promote a placeholder seasonal offer or discount.",
-            "hooks": [
-                "A limited-time reason to book your next stay.",
-                "Worth booking before this one ends.",
-            ],
-            "visual_needed": "Bold offer graphic with clear terms placeholder — confirm real offer details before publishing.",
-            "caption": f"Something special for our followers this week. {hashtags}",
-            "cta": "Book now before the offer ends.",
+            "visual_needed": f"Seasonal imagery for {month} — weather, light, what's on in the city.",
+            "caption": f"{month} has its own rhythm in the city — here's what to expect if you're visiting.",
+            "cta": "Plan your visit — link in bio.",
         },
         "brand_lifestyle": {
-            "objective": "Build brand personality and emotional connection.",
-            "content_idea": "Lifestyle content around what it feels like to stay with us.",
+            "objective": "Build an emotional, specific moment rather than a generic mood board.",
+            "content_idea": "A lifestyle moment built around the first few minutes after check-in.",
             "hooks": [
-                "Home, wherever you're headed.",
-                "This is the feeling we're actually selling.",
+                "The five minutes after check-in, when it stops feeling like a rental.",
+                "What staying with us feels like, not just looks like.",
             ],
-            "visual_needed": "Warm lifestyle imagery — coffee, keys, cosy interior details, no specific unit required.",
-            "caption": f"This is what a stay with us feels like. {hashtags}",
+            "visual_needed": "Warm, specific lifestyle imagery — keys on a counter, coffee, unpacking — not a stock mood shot.",
+            "caption": "The best part of a short-let isn't the photos — it's how fast the place starts to feel like yours.",
             "cta": "Follow along for more from Urban Nest Estates.",
         },
     }
     body = dict(templates[content_type["key"]])
     body["hook"] = _pick_hook(body.pop("hooks"), history_summary, rng)
+    body["caption"] = f"{body['caption']} {hashtags}"
     return body
 
 
@@ -265,6 +270,7 @@ def generate_post(
     history_summary: dict,
     reason: str,
     rng: random.Random | None = None,
+    week_of: str | None = None,
 ) -> dict:
     rng = rng or random.Random()
     chosen_format = _pick_format(content_type, history_summary, rng)
@@ -274,10 +280,10 @@ def generate_post(
         try:
             body = _call_claude(prompt)
         except Exception as exc:  # network/parsing issues -> fall back, don't crash the run
-            body = _template_fallback(brand, content_type, property_record, history_summary, rng)
+            body = _template_fallback(brand, content_type, property_record, history_summary, rng, week_of)
             body["_generation_warning"] = f"Fell back to template (Claude call failed: {exc})"
     else:
-        body = _template_fallback(brand, content_type, property_record, history_summary, rng)
+        body = _template_fallback(brand, content_type, property_record, history_summary, rng, week_of)
 
     post = {
         "content_type": content_type["label"],

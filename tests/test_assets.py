@@ -5,8 +5,10 @@ from unittest import mock
 
 import assets
 from mock_data import MOCK_PROPERTIES as PROPERTIES
+from real_properties import PROPERTIES as REAL_PROPERTIES
 
 RIVERSIDE_LOFT = next(p for p in PROPERTIES if p["id"] == "ldn-01")
+DRAYCOTT_AVENUE = next(p for p in REAL_PROPERTIES if p["id"] == "draycott")
 
 
 @mock.patch.dict(os.environ, {}, clear=True)  # offline heuristic path
@@ -68,6 +70,35 @@ class TestOfflineSelect(unittest.TestCase):
         self.assertEqual(result["assets_selected"], [])
         self.assertIsNone(result["cover_asset"])
         self.assertIsNotNone(result["missing_visual_notes"])
+
+    def test_overlay_preserves_proper_noun_capitalisation(self):
+        # Regression test: Draycott Avenue's feature is "5-minute walk to Sloane
+        # Square station" — str.capitalize() used to lowercase "Sloane Square".
+        result = assets.select_assets_for_post(
+            {"name": "Urban Nest Estates"}, DRAYCOTT_AVENUE, "Carousel", "hook", rng=random.Random(0)
+        )
+        self.assertEqual(result["overlay_text"], "5-minute walk to Sloane Square station")
+
+    def test_overlay_skipped_when_no_short_qualifying_feature(self):
+        long_feature_property = {
+            **DRAYCOTT_AVENUE,
+            "id": "does-not-exist",
+            "standout_features": [
+                "a very long-winded description of a walk to the nearest station that "
+                "goes on for far too long to ever sit cleanly as a photo overlay"
+            ],
+        }
+        result = assets.select_assets_for_post(
+            {"name": "Urban Nest Estates"}, long_feature_property, "Carousel", "hook", rng=random.Random(0)
+        )
+        self.assertIsNone(result["overlay_text"])
+
+    def test_sentence_case_does_not_lowercase_rest_of_string(self):
+        self.assertEqual(
+            assets._sentence_case("5-minute walk to Sloane Square station"),
+            "5-minute walk to Sloane Square station",
+        )
+        self.assertEqual(assets._sentence_case("bright living area"), "Bright living area")
 
 
 class TestLoadAssetRecords(unittest.TestCase):

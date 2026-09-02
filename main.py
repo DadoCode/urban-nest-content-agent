@@ -22,12 +22,38 @@ from datetime import date
 from pathlib import Path
 
 import history
+import planner
+import publishability
 import render
 from generator import generate_post
 from mock_data import BRAND
-from planner import build_weekly_decisions
 
 OUTPUT_DIR = Path(__file__).parent / "output"
+MAX_ATTEMPTS_PER_SLOT = 3
+
+
+def _generate_publishable_post(decision, history_summary, rng, week_of, used_keys):
+    """Generates a post for this decision; if it turns out unproducible
+    (see publishability.check_post), asks the planner for a different idea
+    and tries again, up to MAX_ATTEMPTS_PER_SLOT times."""
+    for attempt in range(MAX_ATTEMPTS_PER_SLOT):
+        post = generate_post(
+            BRAND, decision["content_type"], decision["property"], history_summary,
+            decision["reason"], rng, week_of=week_of,
+        )
+        check = publishability.check_post(post)
+        post["_publishability"] = check
+        if check["status"] != "cannot_produce" or attempt == MAX_ATTEMPTS_PER_SLOT - 1:
+            return post
+
+        replacement = planner.pick_replacement_decision(
+            BRAND, history_summary, rng, exclude_keys=used_keys | {decision["content_type"]["key"]}
+        )
+        if replacement is None:
+            return post
+        used_keys.add(replacement["content_type"]["key"])
+        decision = replacement
+    return post
 
 
 def build_weekly_plan(week_of: str | None = None, rng: random.Random | None = None) -> dict:
@@ -37,10 +63,11 @@ def build_weekly_plan(week_of: str | None = None, rng: random.Random | None = No
     recent_plans = history.load_recent_plans(before=week_of)
     history_summary = history.summarize(recent_plans)
 
-    decisions = build_weekly_decisions(BRAND, history_summary, rng)
+    decisions = planner.build_weekly_decisions(BRAND, history_summary, rng)
+    used_keys = {d["content_type"]["key"] for d in decisions}
 
     posts = [
-        generate_post(BRAND, d["content_type"], d["property"], history_summary, d["reason"], rng)
+        _generate_publishable_post(d, history_summary, rng, week_of, used_keys)
         for d in decisions
     ]
 
@@ -68,7 +95,16 @@ def print_plan(plan: dict) -> None:
             print(f"  [warning] {post['_generation_warning']}")
         if post.get("visual_assets"):
             print_visual_assets(post["visual_assets"])
+        if post.get("_publishability"):
+            print_publishability(post["_publishability"])
         print()
+
+
+def print_publishability(result: dict) -> None:
+    label = {"ready": "READY", "needs_revision": "NEEDS REVISION", "cannot_produce": "CANNOT PRODUCE"}
+    print(f"  Publishability: {label.get(result['status'], result['status'])}")
+    for issue in result["issues"]:
+        print(f"    [{issue['severity']}] {issue['code']}: {issue['message']}")
 
 
 def print_visual_assets(visual_assets: dict) -> None:
@@ -109,12 +145,19 @@ def main():
     args = parser.parse_args()
 
     plan = build_weekly_plan(week_of=args.week_of)
+
+    if not args.no_render:
+        rendered_dir = render.render_plan(plan)
+        # Re-check now that render diagnostics (e.g. text that had to be
+        # shrunk or an overlay that got skipped) are available.
+        for post in plan["posts"]:
+            post["_publishability"] = publishability.check_post(post)
+
     print_plan(plan)
     out_path = save_plan(plan)
     print(f"Saved plan to {out_path}")
 
     if not args.no_render:
-        rendered_dir = render.render_plan(plan)
         print(f"Rendered post assets to {rendered_dir}")
 
 

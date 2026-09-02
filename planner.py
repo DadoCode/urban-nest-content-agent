@@ -20,6 +20,7 @@ import json
 import os
 import random
 
+import publishability
 from history import describe_for_prompt, freshness_weight, rank_by_freshness, weighted_sample_without_replacement
 from mock_data import CONTENT_MIX_GUIDANCE, CONTENT_TYPES
 from real_properties import PROPERTIES
@@ -44,13 +45,19 @@ def _pick_property(recency_map: dict[str, int], rng: random.Random, reason_prefi
     return chosen, reason
 
 
-def _fallback_decide(history_summary: dict, rng: random.Random, exclude_keys: set[str] | None = None) -> list[dict]:
+def _fallback_decide(
+    history_summary: dict,
+    rng: random.Random,
+    exclude_keys: set[str] | None = None,
+    feasible_types: list[dict] | None = None,
+) -> list[dict]:
     """Offline, deterministic-ish decision: weighted-random by freshness."""
     exclude_keys = exclude_keys or set()
+    pool = feasible_types if feasible_types is not None else CONTENT_TYPES
     ct_recency = history_summary["content_type_recency"]
     prop_recency = history_summary["property_recency"]
 
-    candidates = [c for c in CONTENT_TYPES if c["key"] not in exclude_keys]
+    candidates = [c for c in pool if c["key"] not in exclude_keys]
     weights = [freshness_weight(c["label"], ct_recency) for c in candidates]
     picked_types = weighted_sample_without_replacement(candidates, weights, min(3, len(candidates)), rng)
 
@@ -88,10 +95,10 @@ def _fallback_decide(history_summary: dict, rng: random.Random, exclude_keys: se
     return decisions
 
 
-def _build_decision_prompt(brand: dict, history_summary: dict) -> str:
+def _build_decision_prompt(brand: dict, history_summary: dict, feasible_types: list[dict]) -> str:
     type_lines = "\n".join(
         f"- {c['key']}: {c['label']} (bucket: {c['bucket']}, requires_property: {c['requires_property']})"
-        for c in CONTENT_TYPES
+        for c in feasible_types
     )
     property_lines = "\n".join(
         f"- {p['id']}: {p['name']} ({p['area']}, {p['city']}, {p['type']})" for p in PROPERTIES
@@ -137,10 +144,15 @@ def _call_claude(prompt: str) -> list[dict]:
     return json.loads(text)
 
 
-def _validate_claude_decisions(raw: list[dict], history_summary: dict, rng: random.Random) -> list[dict]:
+def _validate_claude_decisions(
+    raw: list[dict], history_summary: dict, rng: random.Random, feasible_types: list[dict]
+) -> list[dict]:
     """Turn Claude's raw picks into validated decisions, dropping anything
-    that breaks the hard constraints and backfilling from the offline
-    heuristic so the run always ends up with exactly 3 valid posts."""
+    that breaks the hard constraints — including a pick that isn't
+    currently feasible (e.g. Claude proposes "Offers" despite the prompt
+    not listing it) — and backfilling from the offline heuristic so the
+    run always ends up with exactly 3 valid posts."""
+    feasible_keys = {c["key"] for c in feasible_types}
     decisions = []
     used_keys: set[str] = set()
     showcase_used = False
@@ -148,7 +160,7 @@ def _validate_claude_decisions(raw: list[dict], history_summary: dict, rng: rand
     for item in raw:
         key = item.get("content_type_key")
         content_type = _TYPES_BY_KEY.get(key)
-        if content_type is None or key in used_keys:
+        if content_type is None or key not in feasible_keys or key in used_keys:
             continue
         if content_type["key"] == "property_showcase" and showcase_used:
             continue
@@ -172,7 +184,9 @@ def _validate_claude_decisions(raw: list[dict], history_summary: dict, rng: rand
 
     if len(decisions) < 3:
         exclude = used_keys | ({"property_showcase"} if showcase_used else set())
-        decisions += _fallback_decide(history_summary, rng, exclude_keys=exclude)[: 3 - len(decisions)]
+        decisions += _fallback_decide(
+            history_summary, rng, exclude_keys=exclude, feasible_types=feasible_types
+        )[: 3 - len(decisions)]
 
     return decisions
 
@@ -180,13 +194,25 @@ def _validate_claude_decisions(raw: list[dict], history_summary: dict, rng: rand
 def build_weekly_decisions(brand: dict, history_summary: dict, rng: random.Random | None = None) -> list[dict]:
     """Return exactly 3 decisions: [{content_type, property, reason}, ...]."""
     rng = rng or random.Random()
+    feasible_types = publishability.feasible_content_types(CONTENT_TYPES, brand)
 
     if os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            prompt = _build_decision_prompt(brand, history_summary)
+            prompt = _build_decision_prompt(brand, history_summary, feasible_types)
             raw = _call_claude(prompt)
-            return _validate_claude_decisions(raw, history_summary, rng)
+            return _validate_claude_decisions(raw, history_summary, rng, feasible_types)
         except Exception:
             pass  # fall through to offline heuristic
 
-    return _fallback_decide(history_summary, rng)
+    return _fallback_decide(history_summary, rng, feasible_types=feasible_types)
+
+
+def pick_replacement_decision(
+    brand: dict, history_summary: dict, rng: random.Random, exclude_keys: set[str]
+) -> dict | None:
+    """Used when a generated post turns out to be unproducible (see
+    publishability.check_post): picks one alternative decision, excluding
+    whatever's already been used or just failed."""
+    feasible_types = publishability.feasible_content_types(CONTENT_TYPES, brand)
+    decisions = _fallback_decide(history_summary, rng, exclude_keys=exclude_keys, feasible_types=feasible_types)
+    return decisions[0] if decisions else None

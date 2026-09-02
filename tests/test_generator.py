@@ -53,6 +53,29 @@ class TestGeneratePost(unittest.TestCase):
         )
         self.assertIsNone(post["property"])
 
+    def test_hashtags_never_duplicated_across_all_content_types(self):
+        brand = {
+            "name": "Urban Nest Estates", "cities": ["London"],
+            "hashtags_core": ["#UrbanNestEstates", "#ShortLets", "#LondonApartments"],
+            "tone_of_voice": "warm",
+        }
+        # Every content type with a real template — offers/reviews are excluded by
+        # publishability upstream and have no template (see generator._template_fallback).
+        gated_keys = {"offers", "reviews"}
+        for content_type in CONTENT_TYPES:
+            if content_type["key"] in gated_keys:
+                continue
+            property_record = PROPERTIES[0] if content_type["key"] == "property_showcase" else None
+            post = generator.generate_post(
+                brand, content_type, property_record, _empty_history(), "r", rng=random.Random(0),
+                week_of="2026-09-02",
+            )
+            for tag in brand["hashtags_core"]:
+                self.assertEqual(
+                    post["caption"].count(tag), 1,
+                    f"{content_type['key']}: '{tag}' appears {post['caption'].count(tag)}x in {post['caption']!r}",
+                )
+
     def test_hook_avoids_immediately_repeating_recent_hook(self):
         content_type = next(c for c in CONTENT_TYPES if c["key"] == "travel_tips")
         brand = {"name": "Urban Nest Estates", "cities": ["London"], "hashtags_core": ["#UrbanNestEstates"], "tone_of_voice": "warm"}

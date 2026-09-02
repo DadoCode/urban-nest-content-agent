@@ -32,6 +32,13 @@ BRAND = {
     "instagram_handle": "@urbannestestates",
     "hashtags_core": ["#UrbanNestEstates", "#ShortLets", "#LondonApartments"],
     "website": "urbannestestates.co.uk",
+    # Empty until a real offer/review is confirmed. Deliberately empty, not
+    # a placeholder — publishability.feasible_content_types() uses this to
+    # keep "Offers"/"Reviews" out of the plan until there's something real
+    # to say. Populate with actual entries (e.g. a confirmed discount code,
+    # or a real guest quote) to make that content type selectable again.
+    "active_offers": [],
+    "guest_reviews": [],
 }
 
 # Fictional mock properties — placeholder data for tests/offline demos only.

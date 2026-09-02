@@ -86,7 +86,7 @@ def load_asset_records(property_id: str) -> list[dict]:
     return records
 
 
-def _missing_visual_notes(all_records: list[dict], selected: list[dict]) -> str | None:
+def _missing_visual_notes(all_records: list[dict], selected: list[dict], cover: dict | None) -> str | None:
     notes = []
     all_shot_types = {a["shot_type"] for a in all_records}
     missing_core = [s for s in CORE_SHOT_TYPES if s not in all_shot_types]
@@ -97,17 +97,42 @@ def _missing_visual_notes(all_records: list[dict], selected: list[dict]) -> str 
     if weak:
         notes.append(f"Skipped low-quality image(s): {', '.join(weak)}.")
 
+    if cover is not None and cover["quality"] < QUALITY_THRESHOLD:
+        notes.append(
+            f"Cover image ({cover['filename']}) is only quality {cover['quality']}/5 — "
+            f"consider adding a stronger hero shot before publishing."
+        )
+
     return " ".join(notes) if notes else None
+
+
+OVERLAY_MAX_CHARS = 48  # long sentences don't belong on a photo — skip overlay if nothing qualifies
+
+
+def _sentence_case(text: str) -> str:
+    """Capitalize the first character only — Python's str.capitalize()
+    would lowercase the rest, mangling proper nouns like 'Sloane Square'."""
+    return text[:1].upper() + text[1:] if text else text
 
 
 def _pick_overlay_text(content_type_format: str, property_record: dict, hook: str) -> str | None:
     if content_type_format == "Reel concept":
-        return hook if len(hook) <= 60 else hook[:57] + "..."
+        # Informational only (written into a storyboard, never drawn on an
+        # image), so no length limit needed here.
+        return hook
 
     if content_type_format == "Carousel":
-        for feature in property_record["standout_features"]:
-            if any(kw in feature.lower() for kw in ["walk", "minute", "station", "access"]):
-                return feature.capitalize()
+        # An overlay should improve the post, not just exist — only propose
+        # one for a short, punchy, non-visual fact (e.g. a walk time), and
+        # only if it's actually short enough to sit cleanly on a photo.
+        candidates = [
+            f for f in property_record["standout_features"]
+            if any(kw in f.lower() for kw in ["walk", "minute", "station", "access"])
+        ]
+        for feature in candidates:
+            cased = _sentence_case(feature)
+            if len(cased) <= OVERLAY_MAX_CHARS:
+                return cased
         return None
 
     return None
@@ -186,7 +211,7 @@ def _offline_select(
         "asset_reasons": reasons,
         "asset_descriptions": descriptions,
         "overlay_text": _pick_overlay_text(chosen_format, property_record, hook),
-        "missing_visual_notes": _missing_visual_notes(asset_records, selected),
+        "missing_visual_notes": _missing_visual_notes(asset_records, selected, cover),
     }
 
 
