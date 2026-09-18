@@ -59,6 +59,13 @@ BEDROOM_PATTERN = re.compile(r"(\d+)[\s-]*bed(?:room)?s?\b")
 SLEEPS_PATTERN = re.compile(r"sleep(?:s|ing)?\s+(\d+)")
 
 
+def _contains_phrase(text: str, phrase: str) -> bool:
+    """Word-boundary substring match. A plain `in` check would let a bare
+    word like 'apartment' (one property's own type) spuriously match inside
+    an unrelated compound token like the hashtag '#LondonApartments'."""
+    return re.search(r"\b" + re.escape(phrase.lower()) + r"\b", text) is not None
+
+
 def feasible_content_types(content_types: list[dict], brand: dict) -> list[dict]:
     """Filter out content types that need data we don't actually have yet.
     Once that data exists (brand['active_offers'] / brand['guest_reviews']
@@ -81,6 +88,17 @@ def _all_property_records() -> list[dict]:
     return REAL_PROPERTIES + MOCK_PROPERTIES
 
 
+def _same_catalog_records(record: dict) -> list[dict]:
+    """Real and mock properties are two separate, unrelated catalogues —
+    a mock property's area/name should never be treated as a 'different
+    property' collision against a real property's copy, or vice versa."""
+    from mock_data import MOCK_PROPERTIES
+    from real_properties import PROPERTIES as REAL_PROPERTIES
+
+    real_ids = {r["id"] for r in REAL_PROPERTIES}
+    return REAL_PROPERTIES if record["id"] in real_ids else MOCK_PROPERTIES
+
+
 def _find_property_record(property_id: str | None) -> dict | None:
     if not property_id:
         return None
@@ -92,33 +110,37 @@ def _find_property_record(property_id: str | None) -> dict | None:
 
 def _check_property_facts(all_text_lower: str, record: dict, flag) -> None:
     """Cross-checks every specific, checkable claim in all_text_lower
-    against `record` (this post's own property) and the wider property
-    catalogue — never against free-form understanding of the sentence."""
-    other_records = [r for r in _all_property_records() if r["id"] != record["id"]]
+    against `record` (this post's own property) and the rest of its own
+    catalogue (real vs. mock stay separate — see _same_catalog_records)."""
+    catalog = _same_catalog_records(record)
+    other_records = [r for r in catalog if r["id"] != record["id"]]
     own_features_text = " ".join(record["standout_features"]).lower()
 
     # Wrong property entirely.
     for other in other_records:
-        if other["name"].lower() in all_text_lower:
+        if _contains_phrase(all_text_lower, other["name"]):
             flag("blocking", "unsupported_property_fact", f"Mentions '{other['name']}', a different property.")
 
     # Area/location claimed that belongs to a different known property.
-    known_areas = {r["area"] for r in _all_property_records()}
+    known_areas = {r["area"] for r in catalog}
     for area in known_areas:
         if area == record["area"]:
             continue
-        if area.lower() in all_text_lower:
+        if _contains_phrase(all_text_lower, area):
             flag(
                 "blocking", "unsupported_property_fact",
                 f"Mentions '{area}', which is not this property's area ({record['area']}).",
             )
 
     # Property type claimed that belongs to a different known property.
-    known_types = {r["type"] for r in _all_property_records()}
+    # Skip a candidate that's actually just a substring of this property's
+    # own correct type (e.g. bare "apartment" inside "modern apartment") —
+    # that's not a wrong claim, it's the same claim worded more simply.
+    known_types = {r["type"] for r in catalog}
     for type_name in known_types:
-        if type_name == record["type"]:
+        if type_name == record["type"] or type_name in record["type"].lower():
             continue
-        if type_name.lower() in all_text_lower:
+        if _contains_phrase(all_text_lower, type_name):
             flag(
                 "blocking", "unsupported_property_fact",
                 f"Describes it as '{type_name}', but the record says {record['type']}.",
@@ -141,7 +163,7 @@ def _check_property_facts(all_text_lower: str, record: dict, flag) -> None:
     # A standout feature that belongs to a different property.
     for other in other_records:
         for feature in other["standout_features"]:
-            if feature.lower() in all_text_lower and feature.lower() not in own_features_text:
+            if _contains_phrase(all_text_lower, feature) and feature.lower() not in own_features_text:
                 flag(
                     "blocking", "unsupported_property_fact",
                     f"Mentions '{feature}', a feature of {other['name']}, not this property.",
@@ -150,8 +172,8 @@ def _check_property_facts(all_text_lower: str, record: dict, flag) -> None:
     # Amenity-category claims (balcony/outdoor, gym, transport) not backed
     # by anything in this property's own standout_features.
     for category, keywords in AMENITY_CATEGORIES.items():
-        claimed = any(kw in all_text_lower for kw in keywords)
-        supported = any(kw in own_features_text for kw in keywords)
+        claimed = any(_contains_phrase(all_text_lower, kw) for kw in keywords)
+        supported = any(_contains_phrase(own_features_text, kw) for kw in keywords)
         if claimed and not supported:
             flag(
                 "blocking", "unsupported_property_fact",
@@ -159,10 +181,19 @@ def _check_property_facts(all_text_lower: str, record: dict, flag) -> None:
             )
 
     # Target/ideal guest type — softer field, so advisory rather than blocking.
-    own_ideal = {p.lower() for p in record["ideal_for"]}
-    other_ideal_phrases = {p for r in other_records for p in r["ideal_for"] if p.lower() not in own_ideal}
+    # Same subset exemption as the type check: a shorter "other" phrase that's
+    # actually a substring of this property's own longer phrase (e.g. "business
+    # travellers" inside this record's own "business travellers near Canary
+    # Wharf") is the same claim worded more simply, not a wrong one.
+    own_ideal_text = " ".join(record["ideal_for"]).lower()
+    other_ideal_phrases = {
+        p for r in other_records for p in r["ideal_for"]
+        if p.lower() not in own_ideal_text
+    }
     for phrase in other_ideal_phrases:
-        if phrase.lower() in all_text_lower:
+        if phrase.lower() in own_ideal_text:
+            continue
+        if _contains_phrase(all_text_lower, phrase):
             flag(
                 "advisory", "unsupported_property_fact",
                 f"Mentions '{phrase}' as an ideal guest type, which isn't listed for this property.",

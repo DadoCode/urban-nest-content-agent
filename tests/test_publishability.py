@@ -229,6 +229,51 @@ class TestPropertyFactGrounding(unittest.TestCase):
         result = publishability.check_post(post)
         self.assertFalse(any(i["code"] == "unsupported_property_fact" for i in result["issues"]))
 
+    def test_brand_hashtag_does_not_false_positive_on_bare_type(self):
+        # Regression: Lascar Wharf's type is the bare word "apartment", which
+        # used to match inside the unrelated hashtag "#LondonApartments" on
+        # every OTHER property's caption via plain substring matching.
+        post = _property_post(
+            caption=(
+                "Say hello to Draycott Avenue — a split-level maisonette in Chelsea, London, "
+                "sleeping 4. #UrbanNestEstates #ShortLets #LondonApartments #Chelsea"
+            )
+        )
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "ready", result["issues"])
+
+    def test_qualified_type_does_not_flag_against_bare_type_elsewhere(self):
+        # Regression: Eider Apartments' own type "modern apartment" contains
+        # the bare word "apartment" (Lascar Wharf's type) as a substring —
+        # that's the same claim worded more simply, not a wrong one.
+        post = _property_post(
+            property_id="pw", property="Eider Apartments",
+            hook="Your next stay in Hendon Waterside could look like this.",
+            content_idea="Walkthrough-style tour of the modern apartment in Hendon Waterside, London.",
+            caption="Say hello to Eider Apartments — a modern apartment in Hendon Waterside, sleeping 5.",
+            objective="Showcase Eider Apartments to attract direct bookings.",
+        )
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "ready", result["issues"])
+
+    def test_real_propertys_own_landmark_mention_not_flagged_via_mock_area(self):
+        # Regression: Lascar Wharf's own real ideal_for phrase mentions
+        # "Canary Wharf" as a nearby landmark. A *mock* test property
+        # (Canary Wharf Executive Suite) happens to have that as its area —
+        # real and mock catalogues must not cross-contaminate.
+        post = _property_post(
+            property_id="lascar-wharf", property="Lascar Wharf",
+            hook="Your next stay in Limehouse could look like this.",
+            content_idea="Walkthrough-style tour of the apartment in Limehouse, London.",
+            caption=(
+                "Say hello to Lascar Wharf — an apartment in Limehouse, London, sleeping 6. "
+                "Perfect for families, business travellers near Canary Wharf, guests relocating to the area."
+            ),
+            objective="Showcase Lascar Wharf to attract direct bookings.",
+        )
+        result = publishability.check_post(post)
+        self.assertEqual(result["status"], "ready", result["issues"])
+
 
 if __name__ == "__main__":
     unittest.main()
